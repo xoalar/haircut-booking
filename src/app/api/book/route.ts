@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { sendSMS } from "@/lib/sms";
+import { sendSms } from "@/lib/sms";
 
 const Body = z.object({
   slotId: z.string().uuid(),
@@ -105,7 +105,7 @@ export async function POST(req: Request) {
       (note ? `\nNote: ${note}` : "");
 
     try {
-      await sendSMS(barberNumber, barberMsg);
+      await sendSms(barberNumber, barberMsg);
     } catch (e) {
       console.error("Barber SMS failed:", e);
     }
@@ -116,7 +116,7 @@ export async function POST(req: Request) {
     const isE164 = /^\+[1-9]\d{7,14}$/.test(phone);
     if (isE164) {
       try {
-        await sendSMS(phone, `Booked ✅ See you at ${when}. Reply STOP to opt out.`);
+        await sendSms(phone, `Booked ✅ See you at ${when}. Reply STOP to opt out.`);
       } catch (e) {
         console.error("Customer SMS failed:", e);
       }
