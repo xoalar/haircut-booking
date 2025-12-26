@@ -1,14 +1,26 @@
-import twilio from "twilio";
+const smsEnabled = process.env.SEND_CUSTOMER_SMS === "true";
 
-function mustEnv(name: string) {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing ${name} env var`);
-  return v;
-}
+export function sendSMS(to: string, body: string) {
+  if (!smsEnabled) {
+    console.log("SMS disabled, skipping send");
+    return;
+  }
 
-const client = twilio(mustEnv("TWILIO_ACCOUNT_SID"), mustEnv("TWILIO_AUTH_TOKEN"));
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const from = process.env.TWILIO_FROM_NUMBER;
 
-export async function sendSms(to: string, body: string) {
-  const from = mustEnv("TWILIO_FROM_NUMBER");
-  return client.messages.create({ to, from, body });
+  if (!accountSid || !authToken || !from) {
+    console.warn("Twilio env vars missing, SMS skipped");
+    return;
+  }
+
+  const twilio = require("twilio");
+  const client = twilio(accountSid, authToken);
+
+  return client.messages.create({
+    from,
+    to,
+    body,
+  });
 }
