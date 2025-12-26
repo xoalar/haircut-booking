@@ -15,14 +15,13 @@ const Body = z.object({
 export async function POST(req: Request) {
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
-
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid booking info." }, { status: 400 });
   }
 
   const { slotId, customerName, customerContact, customerPhone, smsOptIn, note } = parsed.data;
 
-  // 1) Get slot
+  // 1) Load slot
   const { data: slot, error: slotErr } = await supabaseAdmin
     .from("slots")
     .select("id,start_time,is_active,booked")
@@ -30,38 +29,15 @@ export async function POST(req: Request) {
     .single();
 
   if (slotErr || !slot) return NextResponse.json({ error: "Slot not found." }, { status: 404 });
-
-  if (!slot.is_active || slot.booked) {
-    return NextResponse.json({ error: "This slot is not available." }, { status: 409 });
-  }
-
+  if (!slot.is_active || slot.booked) return NextResponse.json({ error: "This slot is not available." }, { status: 409 });
   if (new Date(slot.start_time).getTime() < Date.now()) {
     return NextResponse.json({ error: "That time already passed." }, { status: 409 });
   }
 
-  // 2) Atomically "claim" the slot (prevents double booking)
-  const { data: claimed, error: claimErr } = await supabaseAdmin
-    .from("slots")
-    .update({ booked: true, is_active: false })
-    .eq("id", slotId)
-    .eq("booked", false) // only if not already booked
-    .select("id,start_time")
-    .maybeSingle();
-
-  if (claimErr) {
-    console.error("Claim slot failed:", claimErr);
-    return NextResponse.json({ error: "Booking failed (server/database). Check logs." }, { status: 500 });
-  }
-
-  if (!claimed) {
-    return NextResponse.json(
-      { error: "This slot was just booked by someone else. Try another one." },
-      { status: 409 }
-    );
-  }
-
-  // 3) Insert booking row
-  const { error: insErr } = await supabaseAdmin.from("bookings").insert({
+  // 2) Insert booking (unique constraint should prevent double booking)
+  const { error: insErr } = await supabaseAdmin
+  .from("bookings")
+  .insert({
     slot_id: slotId,
     customer_name: customerName,
     customer_contact: customerContact,
@@ -70,23 +46,36 @@ export async function POST(req: Request) {
     note: note ?? null,
   });
 
+
   if (insErr) {
-    // rollback slot if booking insert fails
+    // 23505 = unique_violation
+    if ((insErr as any).code === "23505") {
+      return NextResponse.json(
+        { error: "This slot was just booked by someone else. Try another one." },
+        { status: 409 }
+      );
+    }
+
     console.error("Booking insert failed:", insErr);
-
-    await supabaseAdmin
-      .from("slots")
-      .update({ booked: false, is_active: true })
-      .eq("id", slotId);
-
     return NextResponse.json(
       { error: "Booking failed (server/database). Check logs." },
       { status: 500 }
     );
   }
 
-  // 4) SMS notifications
-  const when = new Date(claimed.start_time).toLocaleString([], {
+  // 3) Mark slot as booked/inactive
+  const { error: updErr } = await supabaseAdmin
+    .from("slots")
+    .update({ is_active: false, booked: true })
+    .eq("id", slotId);
+
+  if (updErr) {
+    console.error("Slot update failed:", updErr);
+    // booking succeeded, so we still return ok
+  }
+
+  // SMS notifications
+  const when = new Date(slot.start_time).toLocaleString([], {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -123,9 +112,5 @@ export async function POST(req: Request) {
     }
   }
 
-  // 5) Return success response the UI can show
-  return NextResponse.json({
-    ok: true,
-    message: `Booking confirmed for ${when}`,
-  });
+  return NextResponse.json({ ok: true });
 }
