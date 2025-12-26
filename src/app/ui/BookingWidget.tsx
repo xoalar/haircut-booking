@@ -27,7 +27,7 @@ export default function BookingWidget() {
 
   async function loadSlots() {
     setLoading(true);
-    setMsg(null);
+    // IMPORTANT: don't clear msg here, or it will erase "Booked! ✅" immediately
     const res = await fetch("/api/slots", { cache: "no-store" });
     const data = await res.json();
     setSlots(data.slots ?? []);
@@ -42,7 +42,11 @@ export default function BookingWidget() {
     const map = new Map<string, Slot[]>();
     for (const s of slots) {
       const d = new Date(s.start_time);
-      const key = d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+      const key = d.toLocaleDateString([], {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      });
       map.set(key, [...(map.get(key) || []), s]);
     }
     return Array.from(map.entries());
@@ -50,11 +54,14 @@ export default function BookingWidget() {
 
   async function submitBooking() {
     if (!selectedSlot) return;
+
     setMsg(null);
 
     if (name.trim().length < 2) return setMsg("Please enter your name.");
-    if (contact.trim().length < 2) return setMsg("Please enter your Instagram handle (or other contact).");
-    if (smsOptIn && !phoneE164) return setMsg("To get texts, enter a valid US phone number.");
+    if (contact.trim().length < 2)
+      return setMsg("Please enter your Instagram handle (or other contact).");
+    if (smsOptIn && !phoneE164)
+      return setMsg("To get texts, enter a valid US phone number.");
 
     setBooking(true);
     const res = await fetch("/api/book", {
@@ -87,6 +94,7 @@ export default function BookingWidget() {
     setPhoneE164(null);
     setSmsOptIn(false);
     setNote("");
+
     await loadSlots();
   }
 
@@ -94,6 +102,7 @@ export default function BookingWidget() {
     <div style={{ display: "grid", gap: 16 }}>
       <div style={{ padding: 16, border: "1px solid #e5e5e5", borderRadius: 12 }}>
         <h2 style={{ marginTop: 0 }}>Available slots</h2>
+
         {loading ? (
           <p>Loading…</p>
         ) : slots.length === 0 ? (
@@ -103,13 +112,17 @@ export default function BookingWidget() {
             {grouped.map(([day, daySlots]) => (
               <div key={day}>
                 <div style={{ fontWeight: 700, marginBottom: 8 }}>{day}</div>
+
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {daySlots.map((s) => {
                     const isSelected = selectedSlot?.id === s.id;
                     return (
                       <button
                         key={s.id}
-                        onClick={() => setSelectedSlot(s)}
+                        onClick={() => {
+                          setMsg(null);
+                          setSelectedSlot(s);
+                        }}
                         style={{
                           borderRadius: 999,
                           padding: "8px 12px",
@@ -119,7 +132,10 @@ export default function BookingWidget() {
                           cursor: "pointer",
                         }}
                       >
-                        {new Date(s.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                        {new Date(s.start_time).toLocaleTimeString([], {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
                       </button>
                     );
                   })}
@@ -132,6 +148,7 @@ export default function BookingWidget() {
 
       <div style={{ padding: 16, border: "1px solid #e5e5e5", borderRadius: 12 }}>
         <h2 style={{ marginTop: 0 }}>Book</h2>
+
         {!selectedSlot ? (
           <p style={{ color: "#555" }}>Select a slot above to book it.</p>
         ) : (
