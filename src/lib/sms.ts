@@ -1,6 +1,6 @@
 const smsEnabled = process.env.SEND_CUSTOMER_SMS === "true";
 
-export function sendSMS(to: string, body: string) {
+export function sendSms(to: string, body: string) {
   if (!smsEnabled) {
     console.log("SMS disabled, skipping send");
     return;
